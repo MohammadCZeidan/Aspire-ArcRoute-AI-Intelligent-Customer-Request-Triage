@@ -157,9 +157,18 @@ def validate_no_real_secrets():
 
 
 def validate_workflow_compatibility():
-    workflow_text = (ROOT / "workflow" / "arcroute-n8n-workflow.json").read_text(encoding="utf-8")
+    workflow_path = ROOT / "workflow" / "arcroute-n8n-workflow.json"
+    workflow_text = workflow_path.read_text(encoding="utf-8")
     if "require('crypto')" in workflow_text or 'require("crypto")' in workflow_text:
         fail("Workflow must not require the crypto module")
+    workflow = read_json(workflow_path)
+    initial_llm = next((node for node in workflow["nodes"] if node.get("name") == "LLM - Classify and Enrich"), None)
+    if not initial_llm:
+        fail("Workflow missing LLM - Classify and Enrich node")
+    initial_prompt_body = initial_llm.get("parameters", {}).get("jsonBody", "")
+    for required in ["billed_amount", "expected_amount"]:
+        if required not in initial_prompt_body:
+            fail(f"Initial LLM prompt must include {required} amount extraction guidance")
 
 
 def main():
