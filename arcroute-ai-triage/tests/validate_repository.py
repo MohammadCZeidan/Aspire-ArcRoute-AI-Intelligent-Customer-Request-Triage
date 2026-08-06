@@ -159,6 +159,8 @@ def validate_no_real_secrets():
 def validate_workflow_compatibility():
     workflow_path = ROOT / "workflow" / "arcroute-n8n-workflow.json"
     workflow_text = workflow_path.read_text(encoding="utf-8")
+    if "$env.GROQ_MODEL" in workflow_text or "$env.WORKFLOW_VERSION" in workflow_text:
+        fail("Workflow must not depend on $env for model_name or workflow_version")
     if "require('crypto')" in workflow_text or 'require("crypto")' in workflow_text:
         fail("Workflow must not require the crypto module")
     workflow = read_json(workflow_path)
@@ -169,6 +171,18 @@ def validate_workflow_compatibility():
     for required in ["billed_amount", "expected_amount"]:
         if required not in initial_prompt_body:
             fail(f"Initial LLM prompt must include {required} amount extraction guidance")
+    for node_name in ["LLM - Classify and Enrich", "Retry Invalid LLM Output"]:
+        node = next((item for item in workflow["nodes"] if item.get("name") == node_name), None)
+        if not node:
+            fail(f"Workflow missing {node_name} node")
+        params = node.get("parameters", {})
+        credentials = node.get("credentials", {})
+        if params.get("authentication") != "predefinedCredentialType":
+            fail(f"{node_name} must use predefinedCredentialType authentication")
+        if params.get("nodeCredentialType") != "groqApi":
+            fail(f"{node_name} must use the dedicated groqApi credential type")
+        if "httpHeaderAuth" in credentials or params.get("genericAuthType") == "httpHeaderAuth":
+            fail(f"{node_name} must not use generic Header Auth")
 
 
 def main():
