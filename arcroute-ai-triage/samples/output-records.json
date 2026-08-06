@@ -109,7 +109,7 @@
       "invoice_number": null,
       "error_code": null,
       "amounts": [],
-      "time_references": null,
+      "time_references": [],
       "authentication_provider": "Okta",
       "affected_users": null
     },
