@@ -4,11 +4,11 @@ ArcRoute AI is an n8n workflow that turns unstructured ArcVault customer message
 
 ## Component Flow
 
-Inbound systems such as email processors, web forms, and support portals send JSON to `Webhook - Receive Request`. `Normalize Input` ensures every request has a `request_id`, `source`, `received_at`, and `raw_message`. If `request_id` or `received_at` is missing, the workflow generates them. If `raw_message` is missing, the workflow still creates a fallback record and routes it to Human Review rather than failing silently.
+Inbound systems such as email processors, web forms, and support portals send JSON to `Webhook - Receive Request`. `Normalize Input` ensures every request has a `request_id`, `source`, `received_at`, and `raw_message`. If `request_id` or `received_at` is missing, the workflow generates them. If `raw_message` is missing or empty, `IF - Input Valid` routes the request to a structured error response before Groq is called and before any Google Sheets write.
 
 `LLM - Classify and Enrich` sends the normalized message to Groq using a low temperature and a strict system prompt. The model returns semantic fields only: category, priority, confidence, issue summary, identifiers, urgency, impact, follow-up needs, and a human-readable summary. The model is explicitly told not to choose the queue or decide escalation.
 
-`Parse and Validate JSON` parses the LLM response and checks required fields, enum values, and confidence bounds. If validation fails, `Retry Invalid LLM Output` makes one repair attempt. If the retry also fails, the workflow creates a fallback low-confidence record and the deterministic rules route it to Human Review.
+`Parse and Validate JSON` parses the LLM response and checks required fields, nested identifier types, enum values, and confidence bounds. If validation fails, `Retry Invalid LLM Output` makes one repair attempt with the full schema and previous validation errors. If the retry also fails, the workflow creates a fallback low-confidence record and the deterministic rules route it to Human Review.
 
 ## State and Outputs
 
@@ -34,7 +34,7 @@ Billing discrepancy is calculated from extracted money amounts. The workflow loo
 
 ## Error Handling
 
-The workflow handles missing request IDs, missing timestamps, missing sources, malformed LLM JSON, schema validation failures, LLM timeout or HTTP errors, and incomplete input. It avoids exposing API keys by using n8n environment variables and credential configuration. The final record contains escalation reasons that explain why a request was sent to Human Review.
+The workflow handles missing request IDs, missing timestamps, missing sources, missing or empty messages, malformed LLM JSON, schema validation failures, LLM timeout or HTTP errors, and missing response content. It avoids exposing API keys by using n8n environment variables and credential configuration. Invalid empty input returns a structured error response and does not write to the normal queues. LLM/API failures create fallback records whose escalation reasons explain why Human Review is required.
 
 ## Reliability, Latency, Privacy, Security, and Cost
 
