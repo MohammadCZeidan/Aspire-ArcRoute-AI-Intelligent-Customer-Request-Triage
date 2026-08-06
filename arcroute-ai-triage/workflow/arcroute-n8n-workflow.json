@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst body = $json.body || $json;\nconst now = new Date().toISOString();\nconst rawMessage = typeof body.raw_message === 'string' ? body.raw_message.trim() : '';\nconst validationErrors = [];\nif (!rawMessage) validationErrors.push('raw_message is required and must be a non-empty string');\nreturn [{ json: {\n  request_id: body.request_id || `REQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`,\n  source: body.source || 'Unknown',\n  received_at: body.received_at || now,\n  raw_message: rawMessage,\n  input_valid: validationErrors.length === 0,\n  validation_errors: validationErrors,\n  workflow_version: $env.WORKFLOW_VERSION || '1.0.0',\n  model_name: $env.GROQ_MODEL || 'llama-3.3-70b-versatile'\n}}];"
+        "jsCode": "const body = $json.body || $json;\nconst now = new Date().toISOString();\nconst generatedId = `REQ-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.toUpperCase();\nconst rawMessage = typeof body.raw_message === 'string' ? body.raw_message.trim() : '';\nconst validationErrors = [];\nif (!rawMessage) validationErrors.push('raw_message is required and must be a non-empty string');\nreturn [{ json: {\n  request_id: body.request_id || generatedId,\n  source: body.source || 'Unknown',\n  received_at: body.received_at || now,\n  raw_message: rawMessage,\n  input_valid: validationErrors.length === 0,\n  validation_errors: validationErrors,\n  workflow_version: $env.WORKFLOW_VERSION || '1.0.0',\n  model_name: $env.GROQ_MODEL || 'openai/gpt-oss-120b'\n}}];"
       },
       "id": "normalize-input",
       "name": "Normalize Input",
@@ -577,7 +577,6 @@
     "templateCredsSetupCompleted": false,
     "notes": "Credential IDs and Google Sheets document ID must be configured manually in n8n. Do not commit real secrets."
   },
-  "versionId": "CONFIGURE_IN_N8N",
   "triggerCount": 1,
   "tags": []
 }

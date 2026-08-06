@@ -32,7 +32,7 @@ The records in [samples/output-records.json](samples/output-records.json) are ex
 ## Technology Stack
 
 - n8n for workflow orchestration.
-- Groq API with `llama-3.3-70b-versatile` or another available open-source Groq model.
+- Groq API with `openai/gpt-oss-120b` or another available JSON Object Mode capable Groq model.
 - n8n Webhook, Code, IF, HTTP Request, Google Sheets, and Respond to Webhook nodes.
 - Google Sheets as the persistent review surface.
 - Environment variables for API keys and configuration.
@@ -47,7 +47,7 @@ See [docs/architecture.md](docs/architecture.md), [docs/architecture-diagram.md]
 
 ```bash
 GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_MODEL=openai/gpt-oss-120b
 WORKFLOW_VERSION=1.0.0
 N8N_WEBHOOK_AUTH_TOKEN=replace_with_shared_secret
 GOOGLE_SHEETS_DOCUMENT_ID=replace_with_google_sheet_id

@@ -27,7 +27,7 @@
     "escalation_flag": false,
     "escalation_reasons": [],
     "human_readable_summary": "The customer is receiving a 403 error when trying to log in to arcvault.io/user/jsmith. The issue began after the update released last Tuesday and should be investigated by Engineering Support.",
-    "model_name": "llama-3.3-70b-versatile",
+    "model_name": "openai/gpt-oss-120b",
     "workflow_version": "1.0.0",
     "processed_at": "2026-08-06T10:00:05Z"
   },
@@ -59,7 +59,7 @@
     "escalation_flag": false,
     "escalation_reasons": [],
     "human_readable_summary": "The customer is requesting bulk export support for audit logs. Product Management should evaluate the compliance use case, expected formats, and export volume.",
-    "model_name": "llama-3.3-70b-versatile",
+    "model_name": "openai/gpt-oss-120b",
     "workflow_version": "1.0.0",
     "processed_at": "2026-08-06T10:05:05Z"
   },
@@ -91,7 +91,7 @@
     "escalation_flag": false,
     "escalation_reasons": [],
     "human_readable_summary": "The customer says invoice #8821 shows $1,240 while the contract rate is $980 per month. Billing Operations should review the $260 discrepancy and confirm the applicable billing period.",
-    "model_name": "llama-3.3-70b-versatile",
+    "model_name": "openai/gpt-oss-120b",
     "workflow_version": "1.0.0",
     "processed_at": "2026-08-06T10:10:05Z"
   },
@@ -123,7 +123,7 @@
     "escalation_flag": false,
     "escalation_reasons": [],
     "human_readable_summary": "The customer wants guidance on setting up SSO with Okta while evaluating a change in authentication provider. Identity & Security should provide setup requirements and clarify whether SAML or OIDC is needed.",
-    "model_name": "llama-3.3-70b-versatile",
+    "model_name": "openai/gpt-oss-120b",
     "workflow_version": "1.0.0",
     "processed_at": "2026-08-06T10:15:05Z"
   },
@@ -155,7 +155,7 @@
     "escalation_flag": true,
     "escalation_reasons": ["Message indicates service outage or unavailability", "Multiple users are affected", "Message contains escalation phrase: dashboard stopped loading"],
     "human_readable_summary": "The customer reports that the dashboard stopped loading around 2pm EST and says multiple users are affected. Incident Response is the recommended queue, but the final queue is Human Review because the request matches outage and multi-user escalation rules.",
-    "model_name": "llama-3.3-70b-versatile",
+    "model_name": "openai/gpt-oss-120b",
     "workflow_version": "1.0.0",
     "processed_at": "2026-08-06T10:20:05Z"
   }
