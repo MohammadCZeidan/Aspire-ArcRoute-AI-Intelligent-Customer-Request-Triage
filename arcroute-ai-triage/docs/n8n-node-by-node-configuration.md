@@ -70,7 +70,7 @@ arcroute-ai-triage/
 ## Required Manual Configuration
 
 - Replace `CONFIGURE_IN_N8N` credential placeholders with real n8n credentials.
-- Configure Groq auth as `Authorization: Bearer <GROQ_API_KEY>`.
+- Configure the dedicated n8n Cloud `Groq` credential on both Groq HTTP Request nodes. The workflow uses `predefinedCredentialType` with `nodeCredentialType: groqApi`, not generic Header Auth.
 - Set `GOOGLE_SHEETS_DOCUMENT_ID` in the n8n environment or directly in the Google Sheets nodes.
 - Confirm Google Sheets tab names match `All Requests` and `Human Review Queue`.
 - If your n8n version imports response-code options differently, set the invalid-request response to 400 manually in the UI.

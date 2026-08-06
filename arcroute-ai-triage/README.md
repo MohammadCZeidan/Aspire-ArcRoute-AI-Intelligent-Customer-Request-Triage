@@ -15,7 +15,7 @@ ArcRoute AI is a technical assessment project for a fictional B2B software compa
 
 ## What Must Be Configured Manually
 
-- Groq API credential in n8n. Use HTTP Header Auth with `Authorization: Bearer <GROQ_API_KEY>` or your n8n environment-secret equivalent.
+- Groq credential in n8n Cloud using the dedicated `Groq` credential type.
 - Google Sheets OAuth credential in n8n.
 - `GOOGLE_SHEETS_DOCUMENT_ID` or the document ID directly in both Google Sheets nodes.
 - Google Sheet tabs named `All Requests` and `Human Review Queue`.
@@ -47,11 +47,11 @@ See [docs/architecture.md](docs/architecture.md), [docs/architecture-diagram.md]
 
 ```bash
 GROQ_API_KEY=your_groq_api_key
-GROQ_MODEL=openai/gpt-oss-120b
-WORKFLOW_VERSION=1.0.0
 N8N_WEBHOOK_AUTH_TOKEN=replace_with_shared_secret
 GOOGLE_SHEETS_DOCUMENT_ID=replace_with_google_sheet_id
 ```
+
+The workflow hard-codes `model_name: 'openai/gpt-oss-120b'` and `workflow_version: '1.0.0'` inside the `Normalize Input` node because n8n Cloud does not require local `$env` access for these values.
 
 ## Google Sheets Setup
 
@@ -75,7 +75,7 @@ After creating the sheet, configure either:
 
 1. In n8n, choose `Import from File`.
 2. Select [workflow/arcroute-n8n-workflow.json](workflow/arcroute-n8n-workflow.json).
-3. Open `LLM - Classify and Enrich` and `Retry Invalid LLM Output`; configure Groq HTTP Header Auth.
+3. Open `LLM - Classify and Enrich` and `Retry Invalid LLM Output`; select your n8n Cloud `Groq` credential. The workflow uses `predefinedCredentialType` with `nodeCredentialType: groqApi`, not generic Header Auth.
 4. Open `Google Sheets - Store All Records` and `Google Sheets - Escalation Queue`; configure Google Sheets OAuth and document ID.
 5. Confirm the webhook response mode is handled by response nodes.
 6. Activate or test the workflow.
