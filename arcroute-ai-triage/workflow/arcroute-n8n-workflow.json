@@ -1,0 +1,464 @@
+{
+  "name": "ArcRoute AI - Intelligent Customer Request Triage",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "arcroute-ai-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-receive-request",
+      "name": "Webhook - Receive Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "notes": "Receives customer requests from email, web forms, or support portals. Configure webhook auth in n8n or validate a shared token before production use."
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst body = $json.body || $json;\nconst now = new Date().toISOString();\nconst requestId = body.request_id || `REQ-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;\nconst rawMessage = typeof body.raw_message === 'string' ? body.raw_message.trim() : '';\nreturn [{\n  json: {\n    request_id: requestId,\n    source: body.source || 'Unknown',\n    received_at: body.received_at || now,\n    raw_message: rawMessage,\n    input_valid: rawMessage.length > 0,\n    input_errors: rawMessage.length > 0 ? [] : ['raw_message is required'],\n    workflow_version: $env.WORKFLOW_VERSION || '1.0.0',\n    model_name: $env.GROQ_MODEL || 'llama-3.3-70b-versatile'\n  }\n}];"
+      },
+      "id": "normalize-input",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0],
+      "notes": "Normalizes webhook payloads and generates request_id/received_at when absent."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model_name, temperature: 0.1, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: `You are ArcRoute AI, an intake classifier for ArcVault customer requests. Return valid JSON only. Do not include markdown, comments, prose, or code fences. Classify based on primary intent. Use semantic understanding for classification and enrichment only. Do not choose destination queues, do not decide human escalation, and do not apply deterministic routing rules. Valid categories: Bug Report, Feature Request, Billing Issue, Technical Question, Incident/Outage. Valid priorities: Low, Medium, High. Low means informational or non-blocking. Medium means a specific user/workflow is blocked or money is involved without widespread outage. High means service unavailable, multiple users affected, production workflows blocked, security/access risk, or strong urgency/outage language. Confidence score must be an integer 0-100 based on evidence. Do not invent facts. Use null, {}, or [] when unavailable. Return exactly: {\"category\":\"Bug Report | Feature Request | Billing Issue | Technical Question | Incident/Outage\",\"priority\":\"Low | Medium | High\",\"confidence_score\":0,\"core_issue\":\"One concise sentence.\",\"identifiers\":{\"account_reference\":null,\"invoice_number\":null,\"error_code\":null,\"amounts\":[],\"time_references\":[],\"authentication_provider\":null,\"affected_users\":null},\"urgency_signal\":\"None | Low | Medium | High\",\"urgency_reason\":\"Short explanation based only on the message.\",\"customer_impact\":\"Concise impact description.\",\"requires_follow_up_information\":true,\"missing_information\":[],\"human_readable_summary\":\"Two or three concise sentences.\"}` }, { role: 'user', content: `Source: ${$json.source}\\nReceived at: ${$json.received_at}\\nMessage: ${$json.raw_message}` } ] } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "llm-classify-and-enrich",
+      "name": "LLM - Classify and Enrich",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_IN_N8N",
+          "name": "Groq API Header Auth - set Authorization Bearer token"
+        }
+      },
+      "notes": "Calls Groq with temperature near zero. Configure HTTP Header Auth with Authorization: Bearer {{$env.GROQ_API_KEY}} or your n8n credential equivalent."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst normalized = $('Normalize Input').first().json;\nconst allowedCategories = ['Bug Report','Feature Request','Billing Issue','Technical Question','Incident/Outage'];\nconst allowedPriorities = ['Low','Medium','High'];\nconst allowedUrgency = ['None','Low','Medium','High'];\nfunction fallback(reason) {\n  return [{ json: { ...normalized, llm_valid: false, validation_errors: [reason], category: 'Technical Question', priority: 'Low', confidence_score: 0, core_issue: 'The request could not be classified automatically.', identifiers: { account_reference: null, invoice_number: null, error_code: null, amounts: [], time_references: [], authentication_provider: null, affected_users: null }, urgency_signal: 'None', urgency_reason: 'LLM output was unavailable or invalid.', customer_impact: 'Unknown impact.', requires_follow_up_information: true, missing_information: ['Manual review required'], human_readable_summary: 'The request could not be classified automatically. Human Review should inspect the original customer message.' } }];\n}\ntry {\n  const content = item.choices?.[0]?.message?.content;\n  if (!content) return fallback('LLM response content missing');\n  const parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  const errors = [];\n  if (!allowedCategories.includes(parsed.category)) errors.push('Invalid category');\n  if (!allowedPriorities.includes(parsed.priority)) errors.push('Invalid priority');\n  if (!Number.isInteger(parsed.confidence_score) || parsed.confidence_score < 0 || parsed.confidence_score > 100) errors.push('Invalid confidence_score');\n  if (!parsed.core_issue) errors.push('Missing core_issue');\n  if (!parsed.identifiers || typeof parsed.identifiers !== 'object') errors.push('Missing identifiers');\n  if (!allowedUrgency.includes(parsed.urgency_signal)) errors.push('Invalid urgency_signal');\n  if (typeof parsed.requires_follow_up_information !== 'boolean') errors.push('Invalid requires_follow_up_information');\n  if (!Array.isArray(parsed.missing_information)) errors.push('Invalid missing_information');\n  if (!parsed.human_readable_summary) errors.push('Missing human_readable_summary');\n  return [{ json: { ...normalized, ...parsed, llm_valid: errors.length === 0, validation_errors: errors } }];\n} catch (error) {\n  return fallback(`Malformed JSON: ${error.message}`);\n}"
+      },
+      "id": "parse-and-validate-json",
+      "name": "Parse and Validate JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 0],
+      "notes": "Validates the strict JSON response. Invalid output continues as a low-confidence fallback and is escalated."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.llm_valid }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "retry-invalid-llm-output",
+      "name": "IF - LLM Output Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [920, 0],
+      "notes": "Routes valid LLM output forward. Invalid output receives one automatic retry."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $('Normalize Input').first().json.model_name, temperature: 0, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: 'Return valid JSON only using the exact ArcRoute schema. Do not include markdown or prose. Use only facts present in the customer message.' }, { role: 'user', content: `Previous output failed validation: ${JSON.stringify($json.validation_errors || [])}\\nCustomer message: ${$('Normalize Input').first().json.raw_message}` } ] } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "retry-invalid-llm-output-http",
+      "name": "Retry Invalid LLM Output",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1140, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "CONFIGURE_IN_N8N",
+          "name": "Groq API Header Auth - set Authorization Bearer token"
+        }
+      },
+      "notes": "Makes one retry when the first LLM response is malformed or schema-invalid."
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst normalized = $('Normalize Input').first().json;\nconst allowedCategories = ['Bug Report','Feature Request','Billing Issue','Technical Question','Incident/Outage'];\nconst allowedPriorities = ['Low','Medium','High'];\nconst allowedUrgency = ['None','Low','Medium','High'];\nfunction fallback(reason) {\n  return [{ json: { ...normalized, llm_valid: false, validation_errors: [reason], category: 'Technical Question', priority: 'Low', confidence_score: 0, core_issue: 'The request could not be classified automatically.', identifiers: { account_reference: null, invoice_number: null, error_code: null, amounts: [], time_references: [], authentication_provider: null, affected_users: null }, urgency_signal: 'None', urgency_reason: 'LLM output was unavailable or invalid after retry.', customer_impact: 'Unknown impact.', requires_follow_up_information: true, missing_information: ['Manual review required'], human_readable_summary: 'The request could not be classified automatically after retry. Human Review should inspect the original customer message.' } }];\n}\ntry {\n  const content = item.choices?.[0]?.message?.content;\n  if (!content) return fallback('Retry response content missing');\n  const parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  const errors = [];\n  if (!allowedCategories.includes(parsed.category)) errors.push('Invalid category');\n  if (!allowedPriorities.includes(parsed.priority)) errors.push('Invalid priority');\n  if (!Number.isInteger(parsed.confidence_score) || parsed.confidence_score < 0 || parsed.confidence_score > 100) errors.push('Invalid confidence_score');\n  if (!parsed.core_issue) errors.push('Missing core_issue');\n  if (!parsed.identifiers || typeof parsed.identifiers !== 'object') errors.push('Missing identifiers');\n  if (!allowedUrgency.includes(parsed.urgency_signal)) errors.push('Invalid urgency_signal');\n  if (typeof parsed.requires_follow_up_information !== 'boolean') errors.push('Invalid requires_follow_up_information');\n  if (!Array.isArray(parsed.missing_information)) errors.push('Invalid missing_information');\n  if (!parsed.human_readable_summary) errors.push('Missing human_readable_summary');\n  if (errors.length) return fallback(`Retry validation failed: ${errors.join('; ')}`);\n  return [{ json: { ...normalized, ...parsed, llm_valid: true, validation_errors: [] } }];\n} catch (error) {\n  return fallback(`Retry malformed JSON: ${error.message}`);\n}"
+      },
+      "id": "parse-retry-json",
+      "name": "Parse Retry JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 220],
+      "notes": "Validates the retry. Repeated failure becomes a fallback Human Review record."
+    },
+    {
+      "parameters": {
+        "jsCode": "const record = { ...$json };\nconst amounts = Array.isArray(record.identifiers?.amounts) ? record.identifiers.amounts : [];\nfunction numeric(v) { return typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, '')); }\nconst billed = amounts.find(a => /billed|charge|invoice/i.test(a.label || ''));\nconst expected = amounts.find(a => /expected|contract|rate/i.test(a.label || ''));\nlet a = billed ? numeric(billed.value) : null;\nlet b = expected ? numeric(expected.value) : null;\nif ((a === null || Number.isNaN(a) || b === null || Number.isNaN(b)) && amounts.length >= 2) {\n  a = numeric(amounts[0].value);\n  b = numeric(amounts[1].value);\n}\nrecord.billing_difference = Number.isFinite(a) && Number.isFinite(b) ? Math.abs(a - b) : null;\nreturn [{ json: record }];"
+      },
+      "id": "calculate-billing-difference",
+      "name": "Calculate Billing Difference",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 0],
+      "notes": "Calculates billing discrepancy deterministically when both billed and expected amounts are available."
+    },
+    {
+      "parameters": {
+        "jsCode": "const record = { ...$json };\nconst text = `${record.raw_message || ''} ${record.identifiers?.authentication_provider || ''}`.toLowerCase();\nlet queue = 'Engineering Support';\nif (record.category === 'Feature Request') queue = 'Product Management';\nif (record.category === 'Billing Issue') queue = 'Billing Operations';\nif (record.category === 'Incident/Outage') queue = 'Incident Response';\nif (record.category === 'Technical Question') {\n  queue = /(sso|authentication|auth provider|okta|identity|permission|security)/i.test(text) ? 'Identity & Security' : 'Engineering Support';\n}\nrecord.recommended_queue = queue;\nreturn [{ json: record }];"
+      },
+      "id": "determine-recommended-queue",
+      "name": "Determine Recommended Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1360, 0],
+      "notes": "Applies deterministic queue mapping. The LLM does not choose queues."
+    },
+    {
+      "parameters": {
+        "jsCode": "const record = { ...$json };\nconst reasons = [];\nconst message = String(record.raw_message || '').toLowerCase();\nconst affected = String(record.identifiers?.affected_users || '').toLowerCase();\nconst phrases = ['outage','down for all users','dashboard stopped loading','multiple users affected','service unavailable'];\nif (!record.llm_valid) reasons.push(`LLM output invalid or incomplete: ${(record.validation_errors || []).join('; ')}`);\nif ((record.confidence_score ?? 0) < 70) reasons.push('Confidence score below 70');\nif (record.category === 'Incident/Outage' || /(outage|unavailable|stopped loading|down)/i.test(message)) reasons.push('Message indicates service outage or unavailability');\nif (/(multiple users|all users|everyone|company-wide)/i.test(`${message} ${affected}`)) reasons.push('Multiple users or all users are affected');\nfor (const phrase of phrases) if (message.includes(phrase)) reasons.push(`Message contains escalation phrase: ${phrase}`);\nif (record.category === 'Billing Issue' && typeof record.billing_difference === 'number' && record.billing_difference > 500) reasons.push('Billing discrepancy greater than $500');\nrecord.escalation_reasons = [...new Set(reasons)];\nrecord.escalation_flag = record.escalation_reasons.length > 0;\nreturn [{ json: record }];"
+      },
+      "id": "evaluate-escalation-rules",
+      "name": "Evaluate Escalation Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1580, 0],
+      "notes": "Applies auditable escalation rules outside the LLM."
+    },
+    {
+      "parameters": {
+        "jsCode": "const record = { ...$json };\nrecord.final_queue = record.escalation_flag ? 'Human Review' : record.recommended_queue;\nreturn [{ json: record }];"
+      },
+      "id": "set-final-queue",
+      "name": "Set Final Queue",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1800, 0],
+      "notes": "Preserves recommended_queue and overrides final_queue only for escalated records."
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = { ...$json };\nr.processed_at = new Date().toISOString();\nconst finalRecord = {\n  request_id: r.request_id,\n  source: r.source,\n  received_at: r.received_at,\n  raw_message: r.raw_message,\n  category: r.category,\n  priority: r.priority,\n  confidence_score: r.confidence_score,\n  core_issue: r.core_issue,\n  identifiers: r.identifiers,\n  urgency_signal: r.urgency_signal,\n  urgency_reason: r.urgency_reason,\n  customer_impact: r.customer_impact,\n  requires_follow_up_information: r.requires_follow_up_information,\n  missing_information: r.missing_information,\n  recommended_queue: r.recommended_queue,\n  final_queue: r.final_queue,\n  escalation_flag: r.escalation_flag,\n  escalation_reasons: r.escalation_reasons,\n  human_readable_summary: r.human_readable_summary,\n  model_name: r.model_name,\n  workflow_version: r.workflow_version,\n  processed_at: r.processed_at\n};\nreturn [{ json: { ...finalRecord, sheet_row: { 'Request ID': finalRecord.request_id, 'Source': finalRecord.source, 'Raw message': finalRecord.raw_message, 'Category': finalRecord.category, 'Priority': finalRecord.priority, 'Confidence': finalRecord.confidence_score, 'Core issue': finalRecord.core_issue, 'Identifiers': JSON.stringify(finalRecord.identifiers), 'Urgency': finalRecord.urgency_signal, 'Recommended queue': finalRecord.recommended_queue, 'Final queue': finalRecord.final_queue, 'Escalation flag': finalRecord.escalation_flag, 'Escalation reasons': JSON.stringify(finalRecord.escalation_reasons), 'Summary': finalRecord.human_readable_summary, 'Processed timestamp': finalRecord.processed_at } } }];"
+      },
+      "id": "create-final-record",
+      "name": "Create Final Record",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2020, 0],
+      "notes": "Creates the final output schema and a flattened row for Google Sheets."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{ $env.GOOGLE_SHEETS_DOCUMENT_ID }}",
+        "sheetName": "All Requests",
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "google-sheets-store-all-records",
+      "name": "Google Sheets - Store All Records",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2240, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_IN_N8N",
+          "name": "Google Sheets OAuth2 - configure manually"
+        }
+      },
+      "notes": "Stores every processed request. Map sheet_row fields to the documented columns if auto-map is unavailable in your n8n version."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Create Final Record').first().json.escalation_flag }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-escalated",
+      "name": "IF - Escalated",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2460, 0],
+      "notes": "Splits escalated records to the Human Review Queue sheet."
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "={{ $env.GOOGLE_SHEETS_DOCUMENT_ID }}",
+        "sheetName": "Human Review Queue",
+        "columns": {
+          "mappingMode": "autoMapInputData"
+        },
+        "options": {}
+      },
+      "id": "google-sheets-escalation-queue",
+      "name": "Google Sheets - Escalation Queue",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2680, -120],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "CONFIGURE_IN_N8N",
+          "name": "Google Sheets OAuth2 - configure manually"
+        }
+      },
+      "notes": "Stores only records where escalation_flag is true."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $('Create Final Record').first().json }}",
+        "options": {}
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2920, 0],
+      "notes": "Returns the completed final JSON record to the caller."
+    }
+  ],
+  "connections": {
+    "Webhook - Receive Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "LLM - Classify and Enrich",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM - Classify and Enrich": {
+      "main": [
+        [
+          {
+            "node": "Parse and Validate JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Validate JSON": {
+      "main": [
+        [
+          {
+            "node": "IF - LLM Output Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - LLM Output Valid": {
+      "main": [
+        [
+          {
+            "node": "Calculate Billing Difference",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Invalid LLM Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Invalid LLM Output": {
+      "main": [
+        [
+          {
+            "node": "Parse Retry JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Retry JSON": {
+      "main": [
+        [
+          {
+            "node": "Calculate Billing Difference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Billing Difference": {
+      "main": [
+        [
+          {
+            "node": "Determine Recommended Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Recommended Queue": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Escalation Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Escalation Rules": {
+      "main": [
+        [
+          {
+            "node": "Set Final Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Final Queue": {
+      "main": [
+        [
+          {
+            "node": "Create Final Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Final Record": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Store All Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Store All Records": {
+      "main": [
+        [
+          {
+            "node": "IF - Escalated",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Escalated": {
+      "main": [
+        [
+          {
+            "node": "Google Sheets - Escalation Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Escalation Queue": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "notes": "Credential IDs and Google Sheets document ID must be configured manually in n8n. Do not commit real secrets."
+  },
+  "versionId": "configure-in-n8n",
+  "triggerCount": 1,
+  "tags": []
+}
