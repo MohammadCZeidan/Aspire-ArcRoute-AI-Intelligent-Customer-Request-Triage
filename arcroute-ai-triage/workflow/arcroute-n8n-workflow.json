@@ -8,51 +8,78 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "webhook-receive-request",
+      "id": "535004ad-b1f6-4522-bc89-c667fd08f538",
       "name": "Webhook - Receive Request",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 0],
+      "position": [
+        -3520,
+        -48
+      ],
+      "webhookId": "450aae76-1651-4192-8a9a-0098b2a3143b",
       "notes": "Receives customer requests from email, web forms, or support portals. Configure webhook auth before production use."
     },
     {
       "parameters": {
-        "jsCode": "const body = $json.body || $json;\nconst now = new Date().toISOString();\nconst generatedId = `REQ-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.toUpperCase();\nconst rawMessage = typeof body.raw_message === 'string' ? body.raw_message.trim() : '';\nconst validationErrors = [];\nif (!rawMessage) validationErrors.push('raw_message is required and must be a non-empty string');\nreturn [{ json: {\n  request_id: body.request_id || generatedId,\n  source: body.source || 'Unknown',\n  received_at: body.received_at || now,\n  raw_message: rawMessage,\n  input_valid: validationErrors.length === 0,\n  validation_errors: validationErrors,\n  workflow_version: $env.WORKFLOW_VERSION || '1.0.0',\n  model_name: $env.GROQ_MODEL || 'openai/gpt-oss-120b'\n}}];"
+        "jsCode": "const body = $json.body || $json;\nconst now = new Date().toISOString();\n\nconst generatedId =\n  `REQ-${Date.now().toString(36)}-${Math.random()\n    .toString(36)\n    .slice(2, 8)}`.toUpperCase();\n\nconst rawMessage =\n  typeof body.raw_message === 'string'\n    ? body.raw_message.trim()\n    : '';\n\nconst validationErrors = [];\n\nif (!rawMessage) {\n  validationErrors.push(\n    'raw_message is required and must be a non-empty string'\n  );\n}\n\nreturn [\n  {\n    json: {\n      request_id: body.request_id || generatedId,\n      source: body.source || 'Unknown',\n      received_at: body.received_at || now,\n      raw_message: rawMessage,\n      input_valid: validationErrors.length === 0,\n      validation_errors: validationErrors,\n      workflow_version: '1.0.0',\n      model_name: 'openai/gpt-oss-120b',\n    },\n  },\n];"
       },
-      "id": "normalize-input",
+      "id": "0c0c33bb-c3e9-4845-8b40-52523da8924d",
       "name": "Normalize Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [220, 0],
+      "position": [
+        -3296,
+        -48
+      ],
       "notes": "Normalizes webhook payloads and records validation errors before any LLM call."
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.input_valid }}",
-              "value2": true
+              "id": "input_valid",
+              "leftValue": "={{ $json.input_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-input-valid",
+      "id": "f9ac4d84-89f7-45bf-a994-5ef01010d217",
       "name": "IF - Input Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [440, 0],
+      "position": [
+        -3072,
+        -48
+      ],
       "notes": "Prevents invalid input from calling Groq or writing to normal request queues."
     },
     {
       "parameters": {
         "jsCode": "return [{ json: {\n  request_id: $json.request_id,\n  source: $json.source,\n  received_at: $json.received_at,\n  error: 'Invalid request payload',\n  validation_errors: $json.validation_errors\n}}];"
       },
-      "id": "create-validation-error-response",
+      "id": "2be446c7-c32f-4469-8f9a-faaaeaae1513",
       "name": "Create Validation Error Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 240],
+      "position": [
+        -2848,
+        48
+      ],
       "notes": "Creates a structured 400 response for missing or empty raw_message. This path does not write to Google Sheets."
     },
     {
@@ -63,19 +90,22 @@
           "responseCode": 400
         }
       },
-      "id": "respond-invalid-request",
+      "id": "03948cb9-489c-47c8-8172-48535f9cab8c",
       "name": "Respond Invalid Request",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [880, 240],
+      "position": [
+        -2624,
+        48
+      ],
       "notes": "Returns HTTP 400 when supported by this n8n version. If your n8n version stores response code elsewhere, set it manually after import."
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -92,55 +122,77 @@
           "timeout": 30000
         }
       },
-      "id": "llm-classify-and-enrich",
+      "id": "44987423-416c-4da4-ab43-3e54ca70193d",
       "name": "LLM - Classify and Enrich",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 0],
+      "position": [
+        -2848,
+        -144
+      ],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "CONFIGURE_IN_N8N",
-          "name": "Groq API Header Auth - configure manually"
+        "groqApi": {
+          "id": "xBGDE3BvF30rMqJb",
+          "name": "Groq account"
         }
       },
-      "continueOnFail": true,
-      "notes": "Calls Groq with a low temperature. Configure HTTP Header Auth as Authorization: Bearer <GROQ_API_KEY>. Continue-on-fail lets the workflow retry or fall back without exposing secrets."
+      "notes": "Calls Groq with a low temperature. Continue-on-fail lets the workflow retry or fall back without exposing secrets."
     },
     {
       "parameters": {
-        "jsCode": "const normalized = $('Normalize Input').first().json;\nconst allowedCategories = ['Bug Report','Feature Request','Billing Issue','Technical Question','Incident/Outage'];\nconst allowedPriorities = ['Low','Medium','High'];\nconst allowedUrgency = ['None','Low','Medium','High'];\nfunction asStringOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : value == null ? null : null; }\nfunction normalizeAmount(amount, index, errors) {\n  if (!amount || typeof amount !== 'object') { errors.push(`identifiers.amounts[${index}] must be an object`); return null; }\n  const label = typeof amount.label === 'string' && amount.label.trim() ? amount.label.trim() : null;\n  const value = typeof amount.value === 'number' ? amount.value : Number(String(amount.value ?? '').replace(/[^0-9.-]/g, ''));\n  if (!label) errors.push(`identifiers.amounts[${index}].label is required`);\n  if (!Number.isFinite(value)) errors.push(`identifiers.amounts[${index}].value must be numeric`);\n  return { label: label || 'other_amount', value: Number.isFinite(value) ? value : 0, currency: typeof amount.currency === 'string' && amount.currency.trim() ? amount.currency.trim() : 'USD' };\n}\nfunction fallback(reason, previousErrors = []) {\n  return [{ json: { ...normalized, llm_valid: false, validation_errors: [reason, ...previousErrors].filter(Boolean), category: 'Technical Question', priority: 'Low', confidence_score: 0, core_issue: 'The request could not be classified automatically.', identifiers: { account_reference: null, invoice_number: null, error_code: null, amounts: [], time_references: [], authentication_provider: null, affected_users: null }, urgency_signal: 'None', urgency_reason: 'LLM output was unavailable or invalid.', customer_impact: 'Unknown impact.', requires_follow_up_information: true, missing_information: ['Manual review required'], human_readable_summary: 'The request could not be classified automatically. Human Review should inspect the original customer message.' } }];\n}\nfunction validateParsed(parsed) {\n  const errors = [];\n  const out = { ...parsed };\n  if (!allowedCategories.includes(out.category)) errors.push('Invalid category');\n  if (!allowedPriorities.includes(out.priority)) errors.push('Invalid priority');\n  if (!Number.isInteger(out.confidence_score) || out.confidence_score < 0 || out.confidence_score > 100) errors.push('Invalid confidence_score');\n  if (typeof out.core_issue !== 'string' || !out.core_issue.trim()) errors.push('core_issue must be a non-empty string');\n  if (!out.identifiers || typeof out.identifiers !== 'object' || Array.isArray(out.identifiers)) errors.push('identifiers must be an object');\n  const ids = out.identifiers && typeof out.identifiers === 'object' && !Array.isArray(out.identifiers) ? out.identifiers : {};\n  const amounts = Array.isArray(ids.amounts) ? ids.amounts.map((a, i) => normalizeAmount(a, i, errors)).filter(Boolean) : [];\n  if (!Array.isArray(ids.amounts)) errors.push('identifiers.amounts must be an array');\n  if (!Array.isArray(ids.time_references)) errors.push('identifiers.time_references must be an array');\n  if (!allowedUrgency.includes(out.urgency_signal)) errors.push('Invalid urgency_signal');\n  if (typeof out.urgency_reason !== 'string' || !out.urgency_reason.trim()) errors.push('urgency_reason must be a non-empty string');\n  if (typeof out.customer_impact !== 'string' || !out.customer_impact.trim()) errors.push('customer_impact must be a non-empty string');\n  if (typeof out.requires_follow_up_information !== 'boolean') errors.push('requires_follow_up_information must be boolean');\n  if (!Array.isArray(out.missing_information)) errors.push('missing_information must be an array');\n  if (typeof out.human_readable_summary !== 'string' || !out.human_readable_summary.trim()) errors.push('human_readable_summary must be a non-empty string');\n  out.identifiers = {\n    account_reference: asStringOrNull(ids.account_reference),\n    invoice_number: asStringOrNull(ids.invoice_number),\n    error_code: asStringOrNull(ids.error_code),\n    amounts,\n    time_references: Array.isArray(ids.time_references) ? ids.time_references.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [],\n    authentication_provider: asStringOrNull(ids.authentication_provider),\n    affected_users: typeof ids.affected_users === 'string' || typeof ids.affected_users === 'number' ? ids.affected_users : null\n  };\n  out.core_issue = typeof out.core_issue === 'string' ? out.core_issue.trim() : out.core_issue;\n  out.urgency_reason = typeof out.urgency_reason === 'string' ? out.urgency_reason.trim() : out.urgency_reason;\n  out.customer_impact = typeof out.customer_impact === 'string' ? out.customer_impact.trim() : out.customer_impact;\n  out.missing_information = Array.isArray(out.missing_information) ? out.missing_information.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [];\n  out.human_readable_summary = typeof out.human_readable_summary === 'string' ? out.human_readable_summary.trim() : out.human_readable_summary;\n  return { out, errors };\n}\ntry {\n  if ($json.error) return fallback('Groq initial call failed or timed out');\n  const content = $json.choices?.[0]?.message?.content;\n  if (!content) return fallback('LLM response content missing');\n  const parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  const { out, errors } = validateParsed(parsed);\n  return [{ json: { ...normalized, ...out, llm_valid: errors.length === 0, validation_errors: errors } }];\n} catch (error) {\n  return fallback(`Malformed JSON: ${error.message}`);\n}"
+        "jsCode": "const normalized = $('Normalize Input').first().json;\nconst allowedCategories = ['Bug Report','Feature Request','Billing Issue','Technical Question','Incident/Outage'];\nconst allowedPriorities = ['Low','Medium','High'];\nconst allowedUrgency = ['None','Low','Medium','High'];\nfunction asStringOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : value == null ? null : null; }\nfunction normalizeAmount(amount, index, errors) {\n  if (!amount || typeof amount !== 'object') { errors.push(`identifiers.amounts[${index}] must be an object`); return null; }\n  const label = typeof amount.label === 'string' && amount.label.trim() ? amount.label.trim() : null;\n  const value = typeof amount.value === 'number' ? amount.value : Number(String(amount.value ?? '').replace(/[^0-9.-]/g, ''));\n  if (!label) errors.push(`identifiers.amounts[${index}].label is required`);\n  if (!Number.isFinite(value)) errors.push(`identifiers.amounts[${index}].value must be numeric`);\n  return { label: label || 'other_amount', value: Number.isFinite(value) ? value : 0, currency: typeof amount.currency === 'string' && amount.currency.trim() ? amount.currency.trim() : 'USD' };\n}\nfunction fallback(reason, previousErrors = []) {\n  return [{ json: { ...normalized, llm_valid: false, validation_errors: [reason, ...previousErrors].filter(Boolean), category: 'Technical Question', priority: 'Low', confidence_score: 0, core_issue: 'The request could not be classified automatically.', identifiers: { account_reference: null, invoice_number: null, error_code: null, amounts: [], time_references: [], authentication_provider: null, affected_users: null }, urgency_signal: 'None', urgency_reason: 'LLM output was unavailable or invalid.', customer_impact: 'Unknown impact.', requires_follow_up_information: true, missing_information: ['Manual review required'], human_readable_summary: 'The request could not be classified automatically. Human Review should inspect the original customer message.' } }];\n}\nfunction validateParsed(parsed) {\n  const errors = [];\n  const out = { ...parsed };\n  if (!allowedCategories.includes(out.category)) errors.push('Invalid category');\n  if (!allowedPriorities.includes(out.priority)) errors.push('Invalid priority');\n  let confidence = Number(out.confidence_score);\n  if (Number.isFinite(confidence) && confidence >= 0 && confidence <= 1) {\n    confidence = Math.round(confidence * 100);\n  }\n  if (!Number.isInteger(confidence) || confidence < 0 || confidence > 100) {\n    errors.push('Invalid confidence_score');\n  } else {\n    out.confidence_score = confidence;\n  }\n  if (typeof out.core_issue !== 'string' || !out.core_issue.trim()) errors.push('core_issue must be a non-empty string');\n  if (!out.identifiers || typeof out.identifiers !== 'object' || Array.isArray(out.identifiers)) errors.push('identifiers must be an object');\n  const ids = out.identifiers && typeof out.identifiers === 'object' && !Array.isArray(out.identifiers) ? out.identifiers : {};\n  const amounts = Array.isArray(ids.amounts) ? ids.amounts.map((a, i) => normalizeAmount(a, i, errors)).filter(Boolean) : [];\n  if (!Array.isArray(ids.amounts)) errors.push('identifiers.amounts must be an array');\n  if (!Array.isArray(ids.time_references)) errors.push('identifiers.time_references must be an array');\n  if (!allowedUrgency.includes(out.urgency_signal)) errors.push('Invalid urgency_signal');\n  if (typeof out.urgency_reason !== 'string' || !out.urgency_reason.trim()) errors.push('urgency_reason must be a non-empty string');\n  if (typeof out.customer_impact !== 'string' || !out.customer_impact.trim()) errors.push('customer_impact must be a non-empty string');\n  if (typeof out.requires_follow_up_information !== 'boolean') errors.push('requires_follow_up_information must be boolean');\n  if (!Array.isArray(out.missing_information)) errors.push('missing_information must be an array');\n  if (typeof out.human_readable_summary !== 'string' || !out.human_readable_summary.trim()) errors.push('human_readable_summary must be a non-empty string');\n  out.identifiers = {\n    account_reference: asStringOrNull(ids.account_reference),\n    invoice_number: asStringOrNull(ids.invoice_number),\n    error_code: asStringOrNull(ids.error_code),\n    amounts,\n    time_references: Array.isArray(ids.time_references) ? ids.time_references.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [],\n    authentication_provider: asStringOrNull(ids.authentication_provider),\n    affected_users: typeof ids.affected_users === 'string' || typeof ids.affected_users === 'number' ? ids.affected_users : null\n  };\n  out.core_issue = typeof out.core_issue === 'string' ? out.core_issue.trim() : out.core_issue;\n  out.urgency_reason = typeof out.urgency_reason === 'string' ? out.urgency_reason.trim() : out.urgency_reason;\n  out.customer_impact = typeof out.customer_impact === 'string' ? out.customer_impact.trim() : out.customer_impact;\n  out.missing_information = Array.isArray(out.missing_information) ? out.missing_information.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [];\n  out.human_readable_summary = typeof out.human_readable_summary === 'string' ? out.human_readable_summary.trim() : out.human_readable_summary;\n  return { out, errors };\n}\ntry {\n  if ($json.error) return fallback('Groq initial call failed or timed out');\n  const content = $json.choices?.[0]?.message?.content;\n  if (!content) return fallback('LLM response content missing');\n  const parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  const { out, errors } = validateParsed(parsed);\n  return [{ json: { ...normalized, ...out, llm_valid: errors.length === 0, validation_errors: errors } }];\n} catch (error) {\n  return fallback(`Malformed JSON: ${error.message}`);\n}"
       },
-      "id": "parse-and-validate-json",
+      "id": "7e8949ad-7d83-4bce-9a89-e52ec1edb7df",
       "name": "Parse and Validate JSON",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [900, 0],
+      "position": [
+        -2624,
+        -144
+      ],
       "notes": "Validates top-level and nested LLM fields. Safe minor normalization is allowed; invented facts are not."
     },
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $json.llm_valid }}",
-              "value2": true
+              "id": "llm_valid",
+              "leftValue": "={{ $json.llm_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-llm-output-valid",
+      "id": "265f32fd-dabe-48ef-a0c8-6681010d37af",
       "name": "IF - LLM Output Valid",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1120, 0],
+      "position": [
+        -2400,
+        -144
+      ],
       "notes": "Valid output continues to deterministic rules. Invalid output gets one retry."
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.groq.com/openai/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -157,116 +209,293 @@
           "timeout": 30000
         }
       },
-      "id": "retry-invalid-llm-output",
+      "id": "1fe6bc24-9352-4e28-94dc-4969f17e3988",
       "name": "Retry Invalid LLM Output",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1340, 220],
+      "position": [
+        -2176,
+        -80
+      ],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "CONFIGURE_IN_N8N",
-          "name": "Groq API Header Auth - configure manually"
+        "groqApi": {
+          "id": "xBGDE3BvF30rMqJb",
+          "name": "Groq account"
         }
       },
-      "continueOnFail": true,
       "notes": "Performs one retry with the complete schema, original message, and previous validation errors."
     },
     {
       "parameters": {
         "jsCode": "const normalized = $('Normalize Input').first().json;\nconst previousErrors = $('Parse and Validate JSON').first().json.validation_errors || [];\nconst allowedCategories = ['Bug Report','Feature Request','Billing Issue','Technical Question','Incident/Outage'];\nconst allowedPriorities = ['Low','Medium','High'];\nconst allowedUrgency = ['None','Low','Medium','High'];\nfunction asStringOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : value == null ? null : null; }\nfunction normalizeAmount(amount, index, errors) {\n  if (!amount || typeof amount !== 'object') { errors.push(`identifiers.amounts[${index}] must be an object`); return null; }\n  const label = typeof amount.label === 'string' && amount.label.trim() ? amount.label.trim() : null;\n  const value = typeof amount.value === 'number' ? amount.value : Number(String(amount.value ?? '').replace(/[^0-9.-]/g, ''));\n  if (!label) errors.push(`identifiers.amounts[${index}].label is required`);\n  if (!Number.isFinite(value)) errors.push(`identifiers.amounts[${index}].value must be numeric`);\n  return { label: label || 'other_amount', value: Number.isFinite(value) ? value : 0, currency: typeof amount.currency === 'string' && amount.currency.trim() ? amount.currency.trim() : 'USD' };\n}\nfunction fallback(reason, extra = []) {\n  return [{ json: { ...normalized, llm_valid: false, validation_errors: [reason, ...previousErrors, ...extra].filter(Boolean), category: 'Technical Question', priority: 'Low', confidence_score: 0, core_issue: 'The request could not be classified automatically.', identifiers: { account_reference: null, invoice_number: null, error_code: null, amounts: [], time_references: [], authentication_provider: null, affected_users: null }, urgency_signal: 'None', urgency_reason: 'LLM output was unavailable or invalid after retry.', customer_impact: 'Unknown impact.', requires_follow_up_information: true, missing_information: ['Manual review required'], human_readable_summary: 'The request could not be classified automatically after retry. Human Review should inspect the original customer message.' } }];\n}\nfunction validateParsed(parsed) {\n  const errors = [];\n  const out = { ...parsed };\n  if (!allowedCategories.includes(out.category)) errors.push('Invalid category');\n  if (!allowedPriorities.includes(out.priority)) errors.push('Invalid priority');\n  if (!Number.isInteger(out.confidence_score) || out.confidence_score < 0 || out.confidence_score > 100) errors.push('Invalid confidence_score');\n  if (typeof out.core_issue !== 'string' || !out.core_issue.trim()) errors.push('core_issue must be a non-empty string');\n  if (!out.identifiers || typeof out.identifiers !== 'object' || Array.isArray(out.identifiers)) errors.push('identifiers must be an object');\n  const ids = out.identifiers && typeof out.identifiers === 'object' && !Array.isArray(out.identifiers) ? out.identifiers : {};\n  const amounts = Array.isArray(ids.amounts) ? ids.amounts.map((a, i) => normalizeAmount(a, i, errors)).filter(Boolean) : [];\n  if (!Array.isArray(ids.amounts)) errors.push('identifiers.amounts must be an array');\n  if (!Array.isArray(ids.time_references)) errors.push('identifiers.time_references must be an array');\n  if (!allowedUrgency.includes(out.urgency_signal)) errors.push('Invalid urgency_signal');\n  if (typeof out.urgency_reason !== 'string' || !out.urgency_reason.trim()) errors.push('urgency_reason must be a non-empty string');\n  if (typeof out.customer_impact !== 'string' || !out.customer_impact.trim()) errors.push('customer_impact must be a non-empty string');\n  if (typeof out.requires_follow_up_information !== 'boolean') errors.push('requires_follow_up_information must be boolean');\n  if (!Array.isArray(out.missing_information)) errors.push('missing_information must be an array');\n  if (typeof out.human_readable_summary !== 'string' || !out.human_readable_summary.trim()) errors.push('human_readable_summary must be a non-empty string');\n  out.identifiers = { account_reference: asStringOrNull(ids.account_reference), invoice_number: asStringOrNull(ids.invoice_number), error_code: asStringOrNull(ids.error_code), amounts, time_references: Array.isArray(ids.time_references) ? ids.time_references.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [], authentication_provider: asStringOrNull(ids.authentication_provider), affected_users: typeof ids.affected_users === 'string' || typeof ids.affected_users === 'number' ? ids.affected_users : null };\n  out.missing_information = Array.isArray(out.missing_information) ? out.missing_information.filter(v => typeof v === 'string' && v.trim()).map(v => v.trim()) : [];\n  return { out, errors };\n}\ntry {\n  if ($json.error) return fallback('Groq retry call failed or timed out');\n  const content = $json.choices?.[0]?.message?.content;\n  if (!content) return fallback('Retry response content missing');\n  const parsed = typeof content === 'string' ? JSON.parse(content) : content;\n  const { out, errors } = validateParsed(parsed);\n  if (errors.length) return fallback('Retry validation failed', errors);\n  return [{ json: { ...normalized, ...out, llm_valid: true, validation_errors: [] } }];\n} catch (error) {\n  return fallback(`Retry malformed JSON: ${error.message}`);\n}"
       },
-      "id": "parse-retry-json",
+      "id": "f763951a-e134-4485-8420-ea942f9b51d8",
       "name": "Parse Retry JSON",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1560, 220],
+      "position": [
+        -1952,
+        -80
+      ],
       "notes": "Uses the same validation rules as the initial parser. Repeated failure becomes a fallback Human Review record."
     },
     {
       "parameters": {
         "jsCode": "const record = { ...$json };\nconst amounts = Array.isArray(record.identifiers?.amounts) ? record.identifiers.amounts : [];\nfunction numeric(v) { return typeof v === 'number' ? v : Number(String(v).replace(/[^0-9.-]/g, '')); }\nconst billed = amounts.find(a => /billed|charge|invoice/i.test(a.label || ''));\nconst expected = amounts.find(a => /expected|contract|rate/i.test(a.label || ''));\nlet a = billed ? numeric(billed.value) : null;\nlet b = expected ? numeric(expected.value) : null;\nif ((!Number.isFinite(a) || !Number.isFinite(b)) && amounts.length >= 2) {\n  a = numeric(amounts[0].value);\n  b = numeric(amounts[1].value);\n}\nrecord.billing_difference = Number.isFinite(a) && Number.isFinite(b) ? Math.abs(a - b) : null;\nreturn [{ json: record }];"
       },
-      "id": "calculate-billing-difference",
+      "id": "e2834166-2e1f-4cd5-b525-a4a1e011c8e6",
       "name": "Calculate Billing Difference",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1780, 0],
+      "position": [
+        -1728,
+        -144
+      ],
       "notes": "Calculates billing discrepancy deterministically when both billed and expected amounts are available."
     },
     {
       "parameters": {
         "jsCode": "const record = { ...$json };\nconst text = `${record.raw_message || ''} ${record.identifiers?.authentication_provider || ''}`.toLowerCase();\nlet queue = 'Engineering Support';\nif (record.category === 'Feature Request') queue = 'Product Management';\nif (record.category === 'Billing Issue') queue = 'Billing Operations';\nif (record.category === 'Incident/Outage') queue = 'Incident Response';\nif (record.category === 'Technical Question') queue = /(sso|authentication|auth provider|okta|identity|permission|security)/i.test(text) ? 'Identity & Security' : 'Engineering Support';\nif (!record.llm_valid) queue = 'Engineering Support';\nrecord.recommended_queue = queue;\nreturn [{ json: record }];"
       },
-      "id": "determine-recommended-queue",
+      "id": "c2379810-747a-44fc-aed4-381dcd355175",
       "name": "Determine Recommended Queue",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2000, 0],
+      "position": [
+        -1504,
+        -144
+      ],
       "notes": "Applies deterministic queue mapping. The LLM does not choose queues."
     },
     {
       "parameters": {
         "jsCode": "const record = { ...$json };\nconst reasons = [];\nconst message = String(record.raw_message || '').toLowerCase();\nconst affected = String(record.identifiers?.affected_users || '').toLowerCase();\nconst phrases = ['outage','down for all users','dashboard stopped loading','multiple users affected','service unavailable'];\nif (!record.llm_valid) reasons.push(`LLM output invalid or incomplete: ${(record.validation_errors || []).join('; ')}`);\nif ((record.confidence_score ?? 0) < 70) reasons.push('Confidence score below 70');\nif (record.category === 'Incident/Outage' || /(outage|unavailable|stopped loading|down)/i.test(message)) reasons.push('Message indicates service outage or unavailability');\nif (/(multiple users|all users|everyone|company-wide)/i.test(`${message} ${affected}`)) reasons.push('Multiple users or all users are affected');\nfor (const phrase of phrases) if (message.includes(phrase)) reasons.push(`Message contains escalation phrase: ${phrase}`);\nif (record.category === 'Billing Issue' && typeof record.billing_difference === 'number' && record.billing_difference > 500) reasons.push('Billing discrepancy greater than $500');\nrecord.escalation_reasons = [...new Set(reasons)];\nrecord.escalation_flag = record.escalation_reasons.length > 0;\nreturn [{ json: record }];"
       },
-      "id": "evaluate-escalation-rules",
+      "id": "d4ff3c05-3af3-40cc-8937-6f86ccf85a86",
       "name": "Evaluate Escalation Rules",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2220, 0],
+      "position": [
+        -1280,
+        -144
+      ],
       "notes": "Applies auditable escalation rules outside the LLM."
     },
     {
       "parameters": {
         "jsCode": "const record = { ...$json };\nrecord.final_queue = record.escalation_flag ? 'Human Review' : record.recommended_queue;\nreturn [{ json: record }];"
       },
-      "id": "set-final-queue",
+      "id": "78b8e7fd-cb88-4048-a13d-d8999299cd4b",
       "name": "Set Final Queue",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2440, 0],
+      "position": [
+        -1056,
+        -144
+      ],
       "notes": "Preserves recommended_queue and overrides final_queue only for escalated records."
     },
     {
       "parameters": {
         "jsCode": "const r = { ...$json };\nr.processed_at = new Date().toISOString();\nconst finalRecord = {\n  request_id: r.request_id,\n  source: r.source,\n  received_at: r.received_at,\n  raw_message: r.raw_message,\n  category: r.category,\n  priority: r.priority,\n  confidence_score: r.confidence_score,\n  core_issue: r.core_issue,\n  identifiers: r.identifiers,\n  urgency_signal: r.urgency_signal,\n  urgency_reason: r.urgency_reason,\n  customer_impact: r.customer_impact,\n  requires_follow_up_information: r.requires_follow_up_information,\n  missing_information: r.missing_information,\n  recommended_queue: r.recommended_queue,\n  final_queue: r.final_queue,\n  escalation_flag: r.escalation_flag,\n  escalation_reasons: r.escalation_reasons,\n  human_readable_summary: r.human_readable_summary,\n  model_name: r.model_name,\n  workflow_version: r.workflow_version,\n  processed_at: r.processed_at\n};\nreturn [{ json: finalRecord }];"
       },
-      "id": "create-final-record",
+      "id": "39dff9da-a27a-4f56-a592-8467d8ee995a",
       "name": "Create Final Record",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2660, 0],
+      "position": [
+        -832,
+        -144
+      ],
       "notes": "Creates the final output schema. Spreadsheet rows are prepared in separate nodes so webhook response remains the actual final JSON."
     },
     {
       "parameters": {
         "jsCode": "const r = $json;\nreturn [{ json: {\n  'Request ID': r.request_id,\n  'Source': r.source,\n  'Raw message': r.raw_message,\n  'Category': r.category,\n  'Priority': r.priority,\n  'Confidence': r.confidence_score,\n  'Core issue': r.core_issue,\n  'Identifiers': JSON.stringify(r.identifiers),\n  'Urgency': r.urgency_signal,\n  'Recommended queue': r.recommended_queue,\n  'Final queue': r.final_queue,\n  'Escalation flag': r.escalation_flag,\n  'Escalation reasons': JSON.stringify(r.escalation_reasons),\n  'Summary': r.human_readable_summary,\n  'Processed timestamp': r.processed_at\n}}];"
       },
-      "id": "prepare-all-requests-sheet-row",
+      "id": "88a2fca6-4af4-48fd-95de-3497c5ba80cf",
       "name": "Prepare All Requests Sheet Row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2880, 0],
+      "position": [
+        -608,
+        -144
+      ],
       "notes": "Outputs top-level fields matching the exact All Requests sheet headers."
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": "={{ $env.GOOGLE_SHEETS_DOCUMENT_ID }}",
-        "sheetName": "All Requests",
+        "documentId": {
+          "__rl": true,
+          "value": "=https://docs.google.com/spreadsheets/d/1mDfqtwhsUdpZXvvjU5OY-9KIaZuZ_db7HazUuxix6cE/edit?usp=sharing",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "All Requests",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mDfqtwhsUdpZXvvjU5OY-9KIaZuZ_db7HazUuxix6cE/edit#gid=0"
+        },
         "columns": {
-          "mappingMode": "autoMapInputData"
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Request ID",
+              "displayName": "Request ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Raw message",
+              "displayName": "Raw message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Confidence",
+              "displayName": "Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Core issue",
+              "displayName": "Core issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Identifiers",
+              "displayName": "Identifiers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Urgency",
+              "displayName": "Urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Recommended queue",
+              "displayName": "Recommended queue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Final queue",
+              "displayName": "Final queue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Escalation flag",
+              "displayName": "Escalation flag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Escalation reasons",
+              "displayName": "Escalation reasons",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Processed timestamp",
+              "displayName": "Processed timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "google-sheets-store-all-records",
+      "id": "f88fa84d-b977-4b15-b1a2-387b4aa5e8df",
       "name": "Google Sheets - Store All Records",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [3100, 0],
+      "position": [
+        -384,
+        -144
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "CONFIGURE_IN_N8N",
-          "name": "Google Sheets OAuth2 - configure manually"
+          "id": "nPpSql0c32ylB3Ns",
+          "name": "Google Sheets account"
         }
       },
       "notes": "Stores every valid processed request. Invalid raw_message requests are returned before this node."
@@ -274,51 +503,241 @@
     {
       "parameters": {
         "conditions": {
-          "boolean": [
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
             {
-              "value1": "={{ $('Create Final Record').first().json.escalation_flag }}",
-              "value2": true
+              "id": "escalated",
+              "leftValue": "={{ $('Create Final Record').first().json.escalation_flag }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
             }
-          ]
-        }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
       },
-      "id": "if-escalated",
+      "id": "66bf92f5-567a-45db-935d-3d66f585eb09",
       "name": "IF - Escalated",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [3320, 0],
+      "position": [
+        -160,
+        -144
+      ],
       "notes": "Sends only escalated records to the Human Review Queue sheet."
     },
     {
       "parameters": {
         "jsCode": "const r = $('Create Final Record').first().json;\nreturn [{ json: {\n  'Request ID': r.request_id,\n  'Source': r.source,\n  'Raw message': r.raw_message,\n  'Category': r.category,\n  'Priority': r.priority,\n  'Confidence': r.confidence_score,\n  'Core issue': r.core_issue,\n  'Identifiers': JSON.stringify(r.identifiers),\n  'Urgency': r.urgency_signal,\n  'Recommended queue': r.recommended_queue,\n  'Final queue': r.final_queue,\n  'Escalation flag': r.escalation_flag,\n  'Escalation reasons': JSON.stringify(r.escalation_reasons),\n  'Summary': r.human_readable_summary,\n  'Processed timestamp': r.processed_at\n}}];"
       },
-      "id": "prepare-human-review-sheet-row",
+      "id": "757c3453-18ee-464e-8a32-ad622917850d",
       "name": "Prepare Human Review Sheet Row",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3540, -120],
+      "position": [
+        64,
+        -224
+      ],
       "notes": "Outputs top-level fields matching the exact Human Review Queue sheet headers."
     },
     {
       "parameters": {
         "operation": "append",
-        "documentId": "={{ $env.GOOGLE_SHEETS_DOCUMENT_ID }}",
-        "sheetName": "Human Review Queue",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "=https://docs.google.com/spreadsheets/d/1mDfqtwhsUdpZXvvjU5OY-9KIaZuZ_db7HazUuxix6cE/edit?usp=sharing",
+          "__regex": "https:\\/\\/(?:drive|docs)\\.google\\.com(?:\\/.*|)\\/d\\/([0-9a-zA-Z\\-_]+)(?:\\/.*|)"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1146648458,
+          "mode": "list",
+          "cachedResultName": "Human Review Queue",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mDfqtwhsUdpZXvvjU5OY-9KIaZuZ_db7HazUuxix6cE/edit#gid=1146648458"
+        },
         "columns": {
-          "mappingMode": "autoMapInputData"
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Request ID",
+              "displayName": "Request ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Source",
+              "displayName": "Source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Raw message",
+              "displayName": "Raw message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Category",
+              "displayName": "Category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Priority",
+              "displayName": "Priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Confidence",
+              "displayName": "Confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Core issue",
+              "displayName": "Core issue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Identifiers",
+              "displayName": "Identifiers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Urgency",
+              "displayName": "Urgency",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Recommended queue",
+              "displayName": "Recommended queue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Final queue",
+              "displayName": "Final queue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Escalation flag",
+              "displayName": "Escalation flag",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Escalation reasons",
+              "displayName": "Escalation reasons",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Summary",
+              "displayName": "Summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Processed timestamp",
+              "displayName": "Processed timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
         },
         "options": {}
       },
-      "id": "google-sheets-escalation-queue",
+      "id": "7c7dd48c-8d2d-43f2-8390-e3aecfb17602",
       "name": "Google Sheets - Escalation Queue",
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [3760, -120],
+      "position": [
+        288,
+        -224
+      ],
       "credentials": {
         "googleSheetsOAuth2Api": {
-          "id": "CONFIGURE_IN_N8N",
-          "name": "Google Sheets OAuth2 - configure manually"
+          "id": "nPpSql0c32ylB3Ns",
+          "name": "Google Sheets account"
         }
       },
       "notes": "Stores only records where escalation_flag is true."
@@ -329,14 +748,18 @@
         "responseBody": "={{ $('Create Final Record').first().json }}",
         "options": {}
       },
-      "id": "webhook-response",
+      "id": "41cc0c8b-53ce-4e16-a066-e0b0dc8405de",
       "name": "Webhook Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [3980, 0],
+      "position": [
+        512,
+        -144
+      ],
       "notes": "Returns the completed final JSON record, not the Google Sheets node output."
     }
   ],
+  "pinData": {},
   "connections": {
     "Webhook - Receive Request": {
       "main": [
@@ -569,14 +992,18 @@
       ]
     }
   },
+  "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
-  "pinData": {},
+  "versionId": "eb14588c-a6c6-48f7-8ee7-4583cfee4408",
   "meta": {
-    "templateCredsSetupCompleted": false,
-    "notes": "Credential IDs and Google Sheets document ID must be configured manually in n8n. Do not commit real secrets."
+    "templateCredsSetupCompleted": true,
+    "instanceId": "911629c35127207ff5f68331ca5e0e5447ce6f80ef05d51bcef0ab52354bdf02"
   },
-  "triggerCount": 1,
+  "nodeGroups": [],
+  "id": "02UTwWt5aknc5FPN",
   "tags": []
 }
